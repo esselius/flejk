@@ -1,4 +1,4 @@
-{ system, inputs, pkgs, lib, config, ... }:
+{ inputs, pkgs, lib, config, ... }:
 
 with lib;
 with lib.types;

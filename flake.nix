@@ -3,39 +3,35 @@
   inputs.terranix.url = "github:mrVanDalo/terranix/feature/flakes";
   inputs.utils.url = "github:numtide/flake-utils";
 
-  outputs = { self, nixpkgs, terranix, utils }:
+  outputs = { self, nixpkgs, terranix, utils }@inputs:
     let
-      flakeModules = nixpkgs.lib.filesystem.listFilesRecursive ./flakeModules;
+      inherit (nixpkgs.lib) evalModules filterAttrs elem;
+      inherit (nixpkgs.lib.filesystem) listFilesRecursive;
+      inherit (utils.lib) eachDefaultSystem;
 
-      evalFlakeModules = { system, inputs ? { inherit nixpkgs terranix; }, modules ? [ ], config ? { } }:
-        (nixpkgs.lib.filterAttrs
-          (key: _: builtins.elem key [
-            "checks"
-            "packages"
-            "defaultPackage"
-            "apps"
-            "defaultApp"
-            "legacyPackages"
-            "overlay"
-            "overlays"
-            "nixosModule"
-            "nixosModules"
-            "nixosConfigurations"
-            "devShell"
-            "hydraJobs"
-            "defaultTemplate"
-            "templates"
-          ])
-          (nixpkgs.lib.evalModules {
-            specialArgs = {
-              inherit inputs system;
-              pkgs = import nixpkgs { inherit system; };
-            };
-            modules = flakeModules ++ modules ++ [ config ];
-          }).config);
+      flakeKeys = [
+        "checks"
+        "packages"
+        "defaultPackage"
+        "apps"
+        "defaultApp"
+        "legacyPackages"
+        "devShell"
+        "hydraJobs"
+      ];
+
+      flakeModules = listFilesRecursive ./flakeModules;
     in
     {
       inherit flakeModules;
-      lib = { inherit evalFlakeModules; };
+
+      lib.evalModule = module:
+        let
+          config = eachDefaultSystem (system: (evalModules {
+            specialArgs = { inherit inputs system; };
+            modules = flakeModules ++ [ module ];
+          }).config);
+        in
+        (filterAttrs (k: _: elem k flakeKeys) config) // config.outputs.x86_64-linux;
     };
 }
