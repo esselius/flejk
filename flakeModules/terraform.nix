@@ -1,4 +1,4 @@
-{ inputs, pkgs, lib, config, ... }:
+{ pkgs, lib, config, ... }:
 
 with lib;
 with lib.types;
@@ -6,9 +6,20 @@ with lib.types;
 let
   cfg = config.terraform;
 
-  inherit (inputs.terranix.lib) buildTerranix;
   inherit (pkgs.writers) writeBashBin;
   inherit (pkgs) terraform symlinkJoin mkShell;
+
+  buildTerranix = { pkgs, terranix_config, ... }@terranix_args:
+    let
+      terraform = import "${pkgs.terranix}/core/default.nix" terranix_args;
+      config_json = pkgs.writeTextFile {
+        name = "terraform-config";
+        text = builtins.toJSON terraform.config;
+        executable = false;
+        destination = "/config.tf.json";
+      };
+    in
+    config_json;
 
   configDir = modules: buildTerranix {
     inherit pkgs;
