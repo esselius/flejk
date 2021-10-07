@@ -4,33 +4,20 @@
 
   outputs = { self, nixpkgs, utils }:
     let
-      inherit (nixpkgs.lib) evalModules filterAttrs elem;
+      inherit (nixpkgs.lib) evalModules filterAttrs elem foldr recursiveUpdate;
       inherit (nixpkgs.lib.filesystem) listFilesRecursive;
-      inherit (utils.lib) eachDefaultSystem;
-
-      flakeKeys = [
-        "checks"
-        "packages"
-        "defaultPackage"
-        "apps"
-        "defaultApp"
-        "legacyPackages"
-        "devShell"
-        "hydraJobs"
-      ];
+      inherit (utils.lib) eachDefaultSystem eachSystem;
 
       flakeModules = listFilesRecursive ./flakeModules;
     in
     {
       inherit flakeModules;
 
-      lib.evalModule = specialArgs: module:
-        let
-          config = eachDefaultSystem (system: (evalModules {
-            specialArgs = { inherit system; } // specialArgs;
-            modules = flakeModules ++ [ module ];
-          }).config);
-        in
-        (filterAttrs (k: _: elem k flakeKeys) config) // config.outputs.x86_64-linux;
+      lib.evalModule = { inputs ? { inherit nixpkgs; }, specialArgs ? { }, modules ? [ ] }: module:
+        foldr recursiveUpdate { } (map
+          (system: (evalModules {
+            specialArgs = { inherit inputs system; } // specialArgs;
+            modules = flakeModules ++ modules ++ [ module ];
+          }).config.outputs) [ "x86_64-darwin" "x86_64-linux" ]);
     };
 }

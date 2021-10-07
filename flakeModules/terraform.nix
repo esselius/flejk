@@ -1,4 +1,4 @@
-{ pkgs, lib, config, ... }:
+{ system, pkgs, lib, config, ... }:
 
 with lib;
 with lib.types;
@@ -28,22 +28,30 @@ let
     };
   };
 
-  tfScript = name: modules: writeBashBin "tf-${name}" ''
-    rundir="/tmp/.flejk/tf/${name}"
+  tfScript = name: modules: writeBashBin "${name}" ''
+    rundir="/tmp/.flejk/${name}"
     mkdir -p "$rundir"
     cp -f "${configDir modules}/config.tf.json" "$rundir/" 
 
     ${terraform}/bin/terraform -chdir="$rundir" "''$@"
   '';
 
-  # FIXME
-  perEnvLayer = stack: { global, environments, layers, terraformModules }: head (flatten (map
-    (env: map
-      (layer: { type = "app"; program = "${tfScript "${stack}-${env}-${layer}" (terraformModules ++ [ global environments.${env} layers.${layer} ])}/bin/tf-${stack}-${env}-${layer}"; })
-      (attrNames layers))
-    (attrNames environments)));
+  mkTerraformApp = name: modules: global: env: layer: {
+    type = "app";
+    program = "${tfScript "${name}" (modules ++ [ global env layer ])}/bin/${name}";
+  };
 
-  mkTerraformConfigs = modules: stack: { global, environments, layers }: perEnvLayer stack { inherit global environments layers; terraformModules = modules; };
+  perStackEnvLayer = modules: stacks: foldr recursiveUpdate { } (flatten
+    (mapAttrsToList
+      (stack: stackVals: (mapAttrsToList
+        (env: envVals: (mapAttrsToList
+          (layer: layerVals: {
+            "tf-${stack}-${env}-${layer}" = mkTerraformApp "tf-${stack}-${env}-${layer}" modules stackVals.global envVals layerVals;
+          })
+          stackVals.layers))
+        stackVals.environments))
+      stacks)
+  );
 in
 {
   options = {
@@ -64,10 +72,9 @@ in
       };
     };
 
-    apps = mkOption { type = attrs; };
   };
 
-  config = mkIf (cfg != { }) {
-    apps = mapAttrs (mkTerraformConfigs cfg.modules) cfg.stack;
+  config = mkIf (cfg.stack != { }) {
+    outputs.apps.${system} = perStackEnvLayer cfg.modules cfg.stack;
   };
 }
