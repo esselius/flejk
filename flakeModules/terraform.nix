@@ -28,7 +28,7 @@ let
     };
   };
 
-  tfScript = name: modules: writeBashBin "${name}" ''
+  tfScript = name: modules: writeBashBin name ''
     rundir="/tmp/.flejk/${name}"
     mkdir -p "$rundir"
     cp -f "${configDir modules}/config.tf.json" "$rundir/" 
